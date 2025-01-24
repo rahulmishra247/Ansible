@@ -1,0 +1,28 @@
+---
+- name: Apply Security Updates on RHEL
+  hosts: all
+  become: yes
+  vars:
+    apply_reboot: true  # Set to false if you don't want an automatic reboot.
+
+  tasks:
+    - name: Ensure yum-utils is installed (for older RHEL systems)
+      ansible.builtin.yum:
+        name: yum-utils
+        state: present
+
+    - name: Update the system with only security updates
+      ansible.builtin.yum:
+        security: yes
+        state: latest
+
+    - name: Check if a reboot is required (e.g., due to a kernel update)
+      ansible.builtin.shell: "needs-restarting -r || echo 'No reboot needed'"
+      register: reboot_check
+      changed_when: "'No reboot needed' not in reboot_check.stdout"
+
+    - name: Reboot the system if necessary
+      ansible.builtin.reboot:
+      when: 
+        - apply_reboot
+        - "'No reboot needed' not in reboot_check.stdout"
