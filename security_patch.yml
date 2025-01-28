@@ -1,0 +1,48 @@
+---
+- name: Apply Security Patches on RHEL Servers
+  hosts: rhel_servers
+  become: yes
+  vars:
+    reboot_required: false
+
+  tasks:
+
+    - name: Clean YUM cache
+      ansible.builtin.command:
+        cmd: yum clean all
+      register: clean_cache
+
+    - name: Update repository metadata
+      ansible.builtin.command:
+        cmd: yum updateinfo
+      register: repo_update
+
+    - name: List available security updates
+      ansible.builtin.command:
+        cmd: yum updateinfo list security
+      register: security_updates
+      changed_when: "'Needed' in security_updates.stdout"
+
+    - name: Apply security updates
+      ansible.builtin.yum:
+        name: "*"
+        state: latest
+        security: yes
+      register: update_result
+      notify: "Check if reboot is needed"
+
+    - name: Check if reboot is required (RHEL-specific)
+      ansible.builtin.shell:
+        cmd: needs-restarting -r
+      register: reboot_check
+      changed_when: reboot_check.rc == 1
+
+  handlers:
+    - name: Check if reboot is needed
+      ansible.builtin.set_fact:
+        reboot_required: "{{ reboot_check.rc == 1 }}"
+
+    - name: Reboot the server if necessary
+      ansible.builtin.reboot:
+        msg: "Rebooting due to security updates"
+        when: reboot_required
